@@ -387,6 +387,7 @@ public class ApkInstaller {
             for (StagedApk staged : stagedApks) byEntry.put(staged.entryName, staged);
 
             List<File> apkFilesToExtract = new ArrayList<>();
+            long[] installedBytes = {0};
             for (ApkSetValidator.ApkDescriptor descriptor : validation.getApks()) {
                 StagedApk staged = byEntry.get(descriptor.entryName);
                 if (staged == null) throw new IOException("Validated APK was not staged: " + descriptor.entryName);
@@ -402,7 +403,6 @@ public class ApkInstaller {
                     output = new File(splitsDir, ApkSetValidator.splitOutputName(descriptor.entryName));
                 }
 
-                long[] installedBytes = {0};
                 try (InputStream input = new java.io.FileInputStream(staged.file);
                      OutputStream outputStream = new FileOutputStream(output)) {
                     copyStream(input, outputStream, bytesCopied -> {
