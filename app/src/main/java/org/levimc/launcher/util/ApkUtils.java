@@ -73,43 +73,92 @@ public class ApkUtils {
 
     public static String extractMinecraftVersionNameFromApksUri(Context context, Uri uri) {
         File tempApkFile = null;
+        long[] expandedBytes = {0};
+        int entryCount = 0;
         try (InputStream is = context.getContentResolver().openInputStream(uri)) {
             if (is == null) return "Error Apk";
             try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(is))) {
                 ZipEntry entry;
                 while ((entry = zis.getNextEntry()) != null) {
-                    if (!entry.isDirectory() && (entry.getName().equals("base.apk") || entry.getName().endsWith("/base.apk"))) {
-                        tempApkFile = new File(context.getCacheDir(), "temp_base_" + System.currentTimeMillis() + ".apk");
-                        try (OutputStream os = new FileOutputStream(tempApkFile)) {
-                            byte[] buffer = new byte[131072];
-                            int len;
-                            while ((len = zis.read(buffer)) != -1) {
-                                os.write(buffer, 0, len);
-                            }
-                        }
-                        
-                        PackageManager pm = context.getPackageManager();
-                        PackageInfo info = pm.getPackageArchiveInfo(tempApkFile.getAbsolutePath(), 0);
-                        if (info != null) {
-                            String packageName = info.packageName;
-                            String versionName = info.versionName;
-                            if ("com.mojang.minecraftpe".equals(packageName) && versionName != null && !versionName.isEmpty()) {
-                                return "Minecraft_" + versionName;
-                            }
-                        }
-                        break;
+                    if (++entryCount > ApkSetValidator.MAX_ARCHIVE_ENTRIES) {
+                        throw new IOException("APKS archive contains too many entries");
                     }
+                    String entryName = entry.getName();
+                    String safeName = entry.isDirectory() && entryName.endsWith("/")
+                            ? entryName.substring(0, entryName.length() - 1) : entryName;
+                    ApkSetValidator.validateArchiveEntryName(safeName);
+
+                    if (entry.isDirectory()) {
+                        zis.closeEntry();
+                        continue;
+                    }
+                    if (entry.getSize() > ApkSetValidator.MAX_TOTAL_APK_BYTES) {
+                        throw new IOException("APKS archive entry is too large");
+                    }
+
+                    if (ApkSetValidator.isBaseApkEntry(safeName)) {
+                        tempApkFile = File.createTempFile("mcbl_base_preview_", ".apk", context.getCacheDir());
+                        try (OutputStream os = new FileOutputStream(tempApkFile)) {
+                            copyZipEntryBounded(zis, os, expandedBytes, ApkSetValidator.MAX_SINGLE_APK_BYTES);
+                        }
+                        PackageManager pm = context.getPackageManager();
+                        PackageInfo info = pm.getPackageArchiveInfo(
+                                tempApkFile.getAbsolutePath(), PackageManager.GET_SIGNING_CERTIFICATES);
+                        if (info != null &&
+                                ApkSetValidator.MINECRAFT_PACKAGE.equals(info.packageName) &&
+                                info.versionName != null && !info.versionName.isEmpty()) {
+                            return "Minecraft_" + info.versionName;
+                        }
+                        return "Error Apk";
+                    }
+
+                    drainZipEntryBounded(zis, expandedBytes);
                     zis.closeEntry();
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            android.util.Log.w("ApkUtils", "Could not inspect APKS bundle", e);
         } finally {
             if (tempApkFile != null && tempApkFile.exists()) {
                 tempApkFile.delete();
             }
         }
         return "Error Apk";
+    }
+
+    private static long copyZipEntryBounded(
+            InputStream input,
+            OutputStream output,
+            long[] expandedBytes,
+            long maxFileBytes
+    ) throws IOException {
+        try (OutputStream target = output) {
+            byte[] buffer = new byte[131072];
+            long entryBytes = 0;
+            int count;
+            while ((count = input.read(buffer)) != -1) {
+                entryBytes += count;
+                expandedBytes[0] += count;
+                if (entryBytes > maxFileBytes ||
+                        expandedBytes[0] > ApkSetValidator.MAX_TOTAL_APK_BYTES) {
+                    throw new IOException("Expanded APKS data exceeds the safe inspection limit");
+                }
+                target.write(buffer, 0, count);
+            }
+            if (entryBytes <= 0) throw new IOException("Empty base APK entry");
+            return entryBytes;
+        }
+    }
+
+    private static void drainZipEntryBounded(InputStream input, long[] expandedBytes) throws IOException {
+        byte[] buffer = new byte[131072];
+        int count;
+        while ((count = input.read(buffer)) != -1) {
+            expandedBytes[0] += count;
+            if (expandedBytes[0] > ApkSetValidator.MAX_TOTAL_APK_BYTES) {
+                throw new IOException("Expanded APKS data exceeds the safe inspection limit");
+            }
+        }
     }
 
     public static String abiToSystemLibDir(String abi) {
