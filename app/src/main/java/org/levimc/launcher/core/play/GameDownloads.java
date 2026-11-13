@@ -2,6 +2,8 @@ package org.levimc.launcher.core.play;
 
 import android.content.Context;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.Signature;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.AtomicFile;
@@ -11,6 +13,7 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
 import org.levimc.launcher.util.LauncherStorage;
+import org.levimc.launcher.util.ApkSetValidator;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -194,13 +197,24 @@ public final class GameDownloads {
 
     /** The finished download of [versionCode], or null if it is not (completely) on disk. */
     public Downloaded downloaded(long versionCode) {
-        File manifest = new File(downloadDir(versionCode), MANIFEST);
+        File directory = downloadDir(versionCode);
+        File manifest = new File(directory, MANIFEST);
         if (!manifest.isFile()) return null;
         try (InputStreamReader reader = new InputStreamReader(new FileInputStream(manifest), StandardCharsets.UTF_8)) {
             Downloaded downloaded = GSON.fromJson(reader, Downloaded.class);
-            if (downloaded == null || downloaded.files == null || downloaded.files.isEmpty()) return null;
+            if (downloaded == null || downloaded.files == null || downloaded.files.isEmpty()
+                    || downloaded.files.size() > ApkSetValidator.MAX_APK_COUNT
+                    || !"base.apk".equals(downloaded.files.get(0))) return null;
+
+            java.util.Set<String> names = new java.util.HashSet<>();
+            String canonicalDirectory = directory.getCanonicalPath();
             for (String name : downloaded.files) {
-                if (!new File(manifest.getParentFile(), name).isFile()) return null;
+                if (name == null || !name.matches("[A-Za-z0-9._-]{1,200}\\.apk")
+                        || !names.add(name.toLowerCase(Locale.ROOT))) return null;
+                File candidate = new File(directory, name);
+                if (!candidate.isFile() || candidate.length() <= 0
+                        || !candidate.getCanonicalFile().getParentFile().getCanonicalPath().equals(canonicalDirectory)
+                        || new File(candidate.getPath() + ".part").exists()) return null;
             }
             return downloaded;
         } catch (Exception e) {
@@ -384,27 +398,59 @@ public final class GameDownloads {
             // A previous, finished download of the same build is replaced only once this one completes.
             File manifest = new File(dir, MANIFEST);
 
+            if (delivery.files == null || delivery.files.isEmpty()
+                    || delivery.files.size() > ApkSetValidator.MAX_APK_COUNT) {
+                throw new IOException("Google Play returned an empty or oversized APK split set.");
+            }
+
             long total = 0;
-            for (PlayClient.DeliveryFile file : delivery.files) total += Math.max(0, file.size);
+            List<String> names = new ArrayList<>();
+            java.util.Set<String> uniqueNames = new java.util.HashSet<>();
+            for (int index = 0; index < delivery.files.size(); index++) {
+                PlayClient.DeliveryFile file = delivery.files.get(index);
+                String name = fileName(file.name);
+                if (index == 0 && !"base.apk".equals(name)) {
+                    throw new IOException("Google Play delivery did not list base.apk first.");
+                }
+                if (index > 0 && "base.apk".equals(name)) {
+                    throw new IOException("Google Play delivery contains duplicate base APK entries.");
+                }
+                if (!uniqueNames.add(name.toLowerCase(Locale.ROOT))) {
+                    throw new IOException("Google Play returned duplicate APK filenames: " + name);
+                }
+                if (file.size > ApkSetValidator.MAX_SINGLE_APK_BYTES ||
+                        (file.size > 0 && total > ApkSetValidator.MAX_TOTAL_APK_BYTES - file.size)) {
+                    throw new IOException("Google Play APK set exceeds the safe download size limit.");
+                }
+                total += Math.max(0, file.size);
+                names.add(name);
+            }
+            if (total > ApkSetValidator.MAX_TOTAL_APK_BYTES) {
+                throw new IOException("Google Play APK set exceeds the safe download size limit.");
+            }
+
             task.bytesTotal = total;
             task.bytesDone = 0;
             task.state = State.DOWNLOADING;
             notifyChanged(task);
 
             String cookie = cookieHeader(delivery.cookies);
-            List<String> names = new ArrayList<>();
             long[] progress = {0, System.nanoTime(), 0};
-            for (PlayClient.DeliveryFile file : delivery.files) {
-                String name = fileName(file.name);
-                names.add(name);
+            for (int index = 0; index < delivery.files.size(); index++) {
+                checkCancelled(task);
+                PlayClient.DeliveryFile file = delivery.files.get(index);
+                String name = names.get(index);
                 File target = new File(dir, name);
                 downloadFile(task, file, target, cookie, progress);
             }
 
             task.state = State.VERIFYING;
             notifyChanged(task);
-            String versionName = readVersionName(new File(dir, names.get(0)));
-            if (versionName != null) task.versionName = versionName;
+            ApkSetValidator.Validation apkSet = validateDownloadedApks(dir, names);
+            if (task.versionCode > 0 && apkSet.getVersionCode() != task.versionCode) {
+                throw new IOException("Downloaded APK build code does not match the selected Play catalog entry.");
+            }
+            task.versionName = apkSet.getVersionName();
 
             Downloaded downloaded = new Downloaded();
             downloaded.versionCode = task.versionCode;
@@ -542,11 +588,50 @@ public final class GameDownloads {
 
     private String readVersionName(File baseApk) {
         try {
-            PackageInfo info = context.getPackageManager().getPackageArchiveInfo(baseApk.getAbsolutePath(), 0);
+            PackageInfo info = context.getPackageManager().getPackageArchiveInfo(
+                    baseApk.getAbsolutePath(), PackageManager.GET_SIGNING_CERTIFICATES);
             if (info != null && MINECRAFT_PACKAGE.equals(info.packageName)) return info.versionName;
         } catch (Exception ignored) {
         }
         return null;
+    }
+
+    private ApkSetValidator.Validation validateDownloadedApks(File directory, List<String> names) throws Exception {
+        List<ApkSetValidator.ApkDescriptor> descriptors = new ArrayList<>();
+        for (int index = 0; index < names.size(); index++) {
+            File apk = new File(directory, names.get(index));
+            if (!apk.isFile() || apk.length() <= 0) {
+                throw new IOException("A downloaded APK is missing or empty: " + names.get(index));
+            }
+            PackageInfo info = context.getPackageManager().getPackageArchiveInfo(
+                    apk.getAbsolutePath(), PackageManager.GET_SIGNING_CERTIFICATES);
+            if (info == null) throw new IOException("Android could not read downloaded APK metadata: " + names.get(index));
+            descriptors.add(new ApkSetValidator.ApkDescriptor(
+                    names.get(index),
+                    info.packageName,
+                    info.versionName,
+                    info.getLongVersionCode(),
+                    signerSha256(info),
+                    apk.length(),
+                    index == 0
+            ));
+        }
+        return ApkSetValidator.validate(descriptors);
+    }
+
+    private static String signerSha256(PackageInfo info) throws Exception {
+        if (info.signingInfo == null) return "";
+        Signature[] signatures = info.signingInfo.getApkContentsSigners();
+        if (signatures == null || signatures.length == 0) return "";
+        List<String> digests = new ArrayList<>();
+        for (Signature signature : signatures) {
+            byte[] value = MessageDigest.getInstance("SHA-256").digest(signature.toByteArray());
+            StringBuilder hex = new StringBuilder();
+            for (byte b : value) hex.append(String.format(Locale.ROOT, "%02x", b & 0xff));
+            digests.add(hex.toString());
+        }
+        Collections.sort(digests);
+        return String.join(",", digests);
     }
 
     private static String fileName(String splitName) {
