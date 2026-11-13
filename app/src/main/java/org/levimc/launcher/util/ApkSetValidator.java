@@ -100,6 +100,10 @@ public final class ApkSetValidator {
         for (ApkDescriptor apk : apks) {
             if (apk == null) throw new ValidationException("The APK set contains an empty file entry.");
             validateArchiveEntryName(apk.entryName);
+            boolean pathIsBase = isBaseApkEntry(apk.entryName);
+            if (pathIsBase != apk.baseApk) {
+                throw new ValidationException("Base APK identity does not match its archive entry path: " + apk.entryName);
+            }
             String canonicalName = apk.entryName.toLowerCase(Locale.ROOT);
             if (!entryNames.add(canonicalName)) {
                 throw new ValidationException("Duplicate APK entry: " + apk.entryName);
