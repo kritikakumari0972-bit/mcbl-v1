@@ -179,7 +179,7 @@ public final class ApkSetValidator {
     }
 
     public static boolean isBaseApkEntry(String entryName) {
-        return entryName != null && (entryName.equals("base.apk") || entryName.endsWith("/base.apk"));
+        return entryName != null && (entryName.equalsIgnoreCase("base.apk") || entryName.toLowerCase(Locale.ROOT).endsWith("/base.apk"));
     }
 
     public static String splitOutputName(String entryName) throws ValidationException {
