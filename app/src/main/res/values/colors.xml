@@ -39,7 +39,7 @@
     <color name="text_primary">#27272A</color>
     <color name="text_secondary">#52525B</color>
     <color name="qa_icon_color">#27272A</color>
-    <color name="ic_launcher_adaptive_back">#F6F3EA</color>
+    <color name="ic_launcher_adaptive_back">#0D2028</color>
 
     <!-- Launcher UI tokens (Windows: surface / default / segment / border / input). -->
     <color name="ui_chrome">@color/background</color>
