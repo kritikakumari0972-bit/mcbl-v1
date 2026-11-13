@@ -48,6 +48,14 @@ public class ApkSetValidatorTest {
     }
 
     @Test
+    public void rejectsBaseFlagThatDoesNotMatchItsPath() throws Exception {
+        ApkSetValidator.ApkDescriptor mislabeled = new ApkSetValidator.ApkDescriptor(
+                "splits/config.arm64.apk", ApkSetValidator.MINECRAFT_PACKAGE, "1.21.100", 121100,
+                "AABBCC", 500, true);
+        expectInvalid(Arrays.asList(mislabeled));
+    }
+
+    @Test
     public void rejectsWrongPackage() throws Exception {
         ApkSetValidator.ApkDescriptor wrong = new ApkSetValidator.ApkDescriptor(
                 "base.apk", "com.example.fake", "1.21.100", 121100, "AABBCC", 1000, true);
