@@ -17,6 +17,7 @@ public final class ApkSetValidatorSmokeTest {
         check(valid.getApks().size() == 2, "split APK should be retained");
 
         expectInvalid(Collections.singletonList(apk("split.apk", false, "1.21.100", 121100, "ABCD")));
+        expectInvalid(Collections.singletonList(apk("splits/config.apk", true, "1.21.100", 121100, "ABCD")));
         expectInvalid(Arrays.asList(
                 apk("base.apk", true, "1.21.100", 121100, "ABCD"),
                 apk("split.apk", false, "1.21.90", 121090, "ABCD")));
