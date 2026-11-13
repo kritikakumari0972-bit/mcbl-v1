@@ -47,7 +47,7 @@ public final class BedrockRuntimeCompatibility {
         }
 
         public String blockerSummary() {
-            return String.join("\\n", blockers);
+            return String.join("\n", blockers);
         }
 
         public String warningSummary() {
