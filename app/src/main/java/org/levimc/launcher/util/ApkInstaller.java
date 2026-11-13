@@ -347,7 +347,21 @@ public class ApkInstaller {
                     staged.baseApk
             ));
         }
-        return ApkSetValidator.validate(descriptors);
+        ApkSetValidator.Validation validation = ApkSetValidator.validate(descriptors);
+        requireArm64MinecraftLibrary(stagedApks);
+        return validation;
+    }
+
+    private void requireArm64MinecraftLibrary(List<StagedApk> stagedApks) throws IOException {
+        for (StagedApk staged : stagedApks) {
+            try (ZipFile archive = new ZipFile(staged.file)) {
+                ZipEntry minecraftLibrary = archive.getEntry("lib/arm64-v8a/libminecraftpe.so");
+                if (minecraftLibrary != null && !minecraftLibrary.isDirectory() && minecraftLibrary.getSize() > 0) {
+                    return;
+                }
+            }
+        }
+        throw new IOException("This APK set does not contain the ARM64 Bedrock runtime library. Import the complete arm64-v8a or universal APK set.");
     }
 
     private String getSignerSha256(PackageInfo info) throws Exception {
