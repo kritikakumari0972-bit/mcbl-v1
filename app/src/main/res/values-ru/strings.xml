@@ -8,7 +8,7 @@
 
 <resources>
     <!-- Common -->
-    <string name="app_name">LeviLauncher</string>
+    <string name="app_name">MCBL</string>
     <string name="minecraft">Minecraft</string>
     <string name="launch">Запустить</string>
     <string name="beta_badge">Бета</string>
@@ -30,9 +30,9 @@
 
     <!-- About -->
     <string name="about_title">☕ О приложении</string>
-    <string name="copyright">©2024–2026 LeviMC. Все права защищены.</string>
+    <string name="copyright">©2024–2026 LeviMC. MCBL is an independent fork based on LeviLauncher.</string>
     <string name="font_license">Это приложение использует шрифт Misans.</string>
-    <string name="about_footer_github">GitHub: https://github.com/LiteLDev/LeviLauncher-Android</string>
+    <string name="about_footer_github">GitHub: https://github.com/kritikakumari0972-bit/mcbl-v1</string>
     <string name="quick_actions_title">Быстрые действия</string>
     <string name="content_mgmt_section_title">Управление контентом</string>
     <string name="misc_section_title">Разное</string>
