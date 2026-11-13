@@ -54,6 +54,8 @@ public class ApkInstaller {
     private static final int PROGRESS_LIBS_DONE = 92;
     private static final int PROGRESS_METADATA_DONE = 96;
     private static final int PROGRESS_MAX = 100;
+    private static final Set<String> ACTIVE_PROFILE_INSTALLS = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final long STAGING_RETENTION_MS = 24L * 60L * 60L * 1000L;
 
     private final Context context;
     private final ExecutorService executor;
@@ -189,6 +191,15 @@ public class ApkInstaller {
         File parent = new File(context.getCacheDir(), "mcbl-import-staging");
         if (!parent.isDirectory() && !parent.mkdirs()) {
             throw new IOException("Cannot create temporary import storage.");
+        }
+        long staleBefore = System.currentTimeMillis() - STAGING_RETENTION_MS;
+        File[] oldStaging = parent.listFiles();
+        if (oldStaging != null) {
+            for (File old : oldStaging) {
+                if (old.isDirectory() && old.lastModified() > 0 && old.lastModified() < staleBefore) {
+                    deleteDir(old);
+                }
+            }
         }
         File staging = new File(parent, "import-" + UUID.randomUUID());
         if (!staging.mkdirs()) throw new IOException("Cannot allocate temporary import storage.");
@@ -362,7 +373,11 @@ public class ApkInstaller {
         if (dirName == null || !dirName.matches("[A-Za-z0-9._]{1,40}")) {
             throw new IOException("Instance name is invalid.");
         }
-
+        String profileKey = LauncherStorage.sanitizeProfileId(dirName).toLowerCase(Locale.ROOT);
+        if (!ACTIVE_PROFILE_INSTALLS.add(profileKey)) {
+            throw new IOException("An import for this instance is already running.");
+        }
+        try {
         File minecraftRoot = LauncherStorage.getMinecraftRoot(context);
         File baseDir = new File(minecraftRoot, LauncherStorage.sanitizeProfileId(dirName));
         if (baseDir.exists()) {
@@ -423,6 +438,9 @@ public class ApkInstaller {
                 deleteDir(libTargetDir);
             }
             throw error;
+        }
+        } finally {
+            ACTIVE_PROFILE_INSTALLS.remove(profileKey);
         }
     }
 
