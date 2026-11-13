@@ -402,11 +402,13 @@ public class ApkInstaller {
                     output = new File(splitsDir, ApkSetValidator.splitOutputName(descriptor.entryName));
                 }
 
+                long[] installedBytes = {0};
                 try (InputStream input = new java.io.FileInputStream(staged.file);
                      OutputStream outputStream = new FileOutputStream(output)) {
                     copyStream(input, outputStream, bytesCopied -> {
+                        installedBytes[0] += bytesCopied;
                         if (validation.getTotalBytes() > 0) {
-                            postProgressFromBytes(bytesCopied, validation.getTotalBytes(),
+                            postProgressFromBytes(installedBytes[0], validation.getTotalBytes(),
                                     PROGRESS_PREPARED, PROGRESS_COPY_DONE);
                         }
                     });
