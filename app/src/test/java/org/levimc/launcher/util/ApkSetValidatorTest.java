@@ -72,7 +72,10 @@ public class ApkSetValidatorTest {
 
     @Test
     public void rejectsDuplicateOutputNames() throws Exception {
-        expectInvalid(Arrays.asList(base(), split("config.arm64"), split("config.arm64")));
+        ApkSetValidator.ApkDescriptor sameBasenameDifferentFolder = new ApkSetValidator.ApkDescriptor(
+                "another/config.arm64.apk", ApkSetValidator.MINECRAFT_PACKAGE, "1.21.100", 121100,
+                "AABBCC", 500, false);
+        expectInvalid(Arrays.asList(base(), split("config.arm64"), sameBasenameDifferentFolder));
     }
 
     @Test
