@@ -3,7 +3,9 @@ package org.levimc.launcher.core.minecraft
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.app.ActivityManager
 import android.os.Build
+import android.os.StatFs
 import org.levimc.launcher.R
 import org.levimc.launcher.core.auth.MsftAuthManager
 import org.levimc.launcher.core.packages.InstalledPackages
@@ -58,6 +60,38 @@ object MinecraftRuntimePreparer {
             ?: throw IllegalArgumentException("No Minecraft version specified")
         listener.onLog("Using ${version.directoryName} (${version.versionCode})")
         trace.mark("Minecraft version resolved", "${version.directoryName} ${version.versionCode}")
+
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        val memoryInfo = ActivityManager.MemoryInfo()
+        activityManager?.getMemoryInfo(memoryInfo)
+        val totalRamBytes = if (activityManager != null) memoryInfo.totalMem else -1L
+        val availableRamBytes = if (activityManager != null) memoryInfo.availMem else -1L
+        val freeStorageBytes = runCatching {
+            StatFs(LauncherStorage.getAppRoot(context).absolutePath).availableBytes
+        }.getOrDefault(-1L)
+        val compatibility = BedrockRuntimeCompatibility.evaluate(
+            version.versionCode,
+            Build.VERSION.SDK_INT,
+            android.os.Process.is64Bit(),
+            Build.SUPPORTED_64_BIT_ABIS,
+            totalRamBytes,
+            availableRamBytes,
+            freeStorageBytes
+        )
+        if (!compatibility.canLaunch()) {
+            val reason = compatibility.blockerSummary()
+            trace.error("Bedrock runtime compatibility check failed", reason)
+            throw IllegalStateException(reason)
+        }
+        if (compatibility.getWarnings().isNotEmpty()) {
+            val warningSummary = compatibility.warningSummary()
+            listener.onProgress(8, "Device compatibility warning", warningSummary)
+            compatibility.getWarnings().forEach { listener.onLog("Compatibility warning: $it") }
+            trace.warning("Device compatibility warnings", warningSummary)
+        } else {
+            listener.onProgress(8, "Device compatibility checks passed")
+            trace.mark("Device compatibility checks passed")
+        }
 
         if (FeatureSettings.getInstance().isLauncherManagedMcLoginEnabled) {
             listener.onProgress(8, context.getString(R.string.ms_login_auth_xbox_device))
