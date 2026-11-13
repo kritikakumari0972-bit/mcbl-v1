@@ -9,6 +9,7 @@
 - APKS extraction checks every zip entry path, rejects absolute paths, backslashes, dot components, duplicate entries and duplicate flattened split filenames.
 - The accepted APKS layout must contain exactly one `base.apk` entry (at the archive root or nested under a relative folder). Split APKs are flattened into safe private filenames after validation.
 - The complete set is checked before a profile is created: all APKs must have the Minecraft package ID, the same version name, the same long version code and the same signing-certificate SHA-256 fingerprint.
+- At least one APK in the set must contain `lib/arm64-v8a/libminecraftpe.so`, matching MCBL's 64-bit ARM native runtime build.
 - Base APK is normalized to the first position before native-library extraction.
 - Limits: 64 APK files, 256 archive entries, 1 GiB per APK and 2 GiB total expanded data.
 - A non-empty existing instance directory is never overwritten by import. Existing worlds, settings and profile data remain untouched if a name collision occurs.
@@ -22,6 +23,7 @@
 - A completed-download manifest is written only after the split set validates.
 - Manifest paths are restricted to flat APK filenames inside that version's download directory. Partial `.part` files are never shown as finished downloads.
 - The manifest records verified on-disk bytes, not only the sizes advertised by the Play delivery response.
+- Concurrent imports cannot write the same version profile at the same time; abandoned staging workspaces older than 24 hours are cleaned before a new import.
 
 ### Import preview
 
