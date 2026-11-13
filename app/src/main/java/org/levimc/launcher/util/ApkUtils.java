@@ -27,46 +27,44 @@ public class ApkUtils {
 
     public static String extractMinecraftVersionNameFromUri(Context context, Uri uri) {
         if ("file".equals(uri.getScheme()) && uri.getPath() != null) {
-            PackageManager pm = context.getPackageManager();
-            PackageInfo info = pm.getPackageArchiveInfo(uri.getPath(), 0);
-            if (info != null) {
-                String packageName = info.packageName;
-                String versionName = info.versionName;
-                if ("com.mojang.minecraftpe".equals(packageName) && versionName != null && !versionName.isEmpty()) {
-                    return "Minecraft_" + versionName;
-                }
+            File source = new File(uri.getPath());
+            if (!source.isFile() || source.length() <= 0 ||
+                    source.length() > ApkSetValidator.MAX_SINGLE_APK_BYTES) return "Error Apk";
+            PackageInfo info = context.getPackageManager().getPackageArchiveInfo(
+                    source.getAbsolutePath(), PackageManager.GET_SIGNING_CERTIFICATES);
+            if (info != null && ApkSetValidator.MINECRAFT_PACKAGE.equals(info.packageName)
+                    && info.versionName != null && !info.versionName.isEmpty()) {
+                return "Minecraft_" + info.versionName;
             }
             return "Error Apk";
         }
 
         File tempFile = null;
-        try (InputStream is = context.getContentResolver().openInputStream(uri)) {
-            if (is == null) return "Error Apk";
-
-            tempFile = new File(context.getCacheDir(), "temp_apk_" + System.currentTimeMillis() + ".apk");
-            try (OutputStream os = new FileOutputStream(tempFile)) {
+        try (InputStream input = context.getContentResolver().openInputStream(uri)) {
+            if (input == null) return "Error Apk";
+            tempFile = File.createTempFile("mcbl_apk_preview_", ".apk", context.getCacheDir());
+            long copied = 0;
+            try (OutputStream output = new FileOutputStream(tempFile)) {
                 byte[] buffer = new byte[131072];
-                int len;
-                while ((len = is.read(buffer)) != -1) {
-                    os.write(buffer, 0, len);
+                int count;
+                while ((count = input.read(buffer)) != -1) {
+                    copied += count;
+                    if (copied > ApkSetValidator.MAX_SINGLE_APK_BYTES) {
+                        throw new IOException("APK exceeds the safe import size limit");
+                    }
+                    output.write(buffer, 0, count);
                 }
             }
-            PackageManager pm = context.getPackageManager();
-            PackageInfo info = pm.getPackageArchiveInfo(tempFile.getAbsolutePath(), 0);
-            if (info != null) {
-                String packageName = info.packageName;
-                String versionName = info.versionName;
-
-                if ("com.mojang.minecraftpe".equals(packageName) && versionName != null && !versionName.isEmpty()) {
-                    return "Minecraft_" + versionName;
-                }
+            PackageInfo info = context.getPackageManager().getPackageArchiveInfo(
+                    tempFile.getAbsolutePath(), PackageManager.GET_SIGNING_CERTIFICATES);
+            if (info != null && ApkSetValidator.MINECRAFT_PACKAGE.equals(info.packageName)
+                    && info.versionName != null && !info.versionName.isEmpty()) {
+                return "Minecraft_" + info.versionName;
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            android.util.Log.w("ApkUtils", "Could not inspect APK", e);
         } finally {
-            if (tempFile != null && tempFile.exists()) {
-                tempFile.delete();
-            }
+            if (tempFile != null && tempFile.exists()) tempFile.delete();
         }
         return "Error Apk";
     }
