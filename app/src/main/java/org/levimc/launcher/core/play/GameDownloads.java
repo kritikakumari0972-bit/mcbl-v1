@@ -506,6 +506,10 @@ public final class GameDownloads {
         File part = new File(target.getPath() + ".part");
         if (target.exists()) target.delete();
         long offset = part.isFile() ? part.length() : 0;
+        if (offset > ApkSetValidator.MAX_SINGLE_APK_BYTES) {
+            part.delete();
+            offset = 0;
+        }
         if (file.size > 0 && offset > file.size) {
             part.delete();
             offset = 0;
@@ -536,6 +540,9 @@ public final class GameDownloads {
                 while ((read = in.read(buffer)) != -1) {
                     checkCancelled(task);
                     out.write(buffer, 0, read);
+                    if (out.getFilePointer() > ApkSetValidator.MAX_SINGLE_APK_BYTES) {
+                        throw new IOException(target.getName() + " exceeded the APK size limit");
+                    }
                     advance(task, read, progress);
                 }
             }
