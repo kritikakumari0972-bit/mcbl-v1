@@ -451,11 +451,21 @@ public final class GameDownloads {
                 throw new IOException("Downloaded APK build code does not match the selected Play catalog entry.");
             }
             task.versionName = apkSet.getVersionName();
+            long verifiedBytes = 0L;
+            for (String name : names) {
+                long fileBytes = new File(dir, name).length();
+                if (fileBytes <= 0 || verifiedBytes > ApkSetValidator.MAX_TOTAL_APK_BYTES - fileBytes) {
+                    throw new IOException("Downloaded APK set exceeds the safe size limit.");
+                }
+                verifiedBytes += fileBytes;
+            }
+            task.bytesTotal = verifiedBytes;
+            task.bytesDone = verifiedBytes;
 
             Downloaded downloaded = new Downloaded();
             downloaded.versionCode = task.versionCode;
             downloaded.versionName = task.versionName;
-            downloaded.size = total;
+            downloaded.size = verifiedBytes;
             downloaded.downloadedAt = System.currentTimeMillis();
             downloaded.files = names;
             synchronized (PlayAccountStore.class) {
