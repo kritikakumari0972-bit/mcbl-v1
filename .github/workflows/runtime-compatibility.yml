@@ -23,8 +23,14 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Compile runtime compatibility policy
-        run: javac -d build/runtime-policy app/src/main/java/org/levimc/launcher/core/minecraft/BedrockRuntimeCompatibility.java scripts/BedrockRuntimeCompatibilitySmokeTest.java
+      - name: Compile runtime and APK-set safety policies
+        run: |
+          mkdir -p build/runtime-policy
+          javac -d build/runtime-policy app/src/main/java/org/levimc/launcher/core/minecraft/BedrockRuntimeCompatibility.java scripts/BedrockRuntimeCompatibilitySmokeTest.java
+          javac -d build/runtime-policy app/src/main/java/org/levimc/launcher/util/ApkSetValidator.java scripts/ApkSetValidatorSmokeTest.java
 
       - name: Run runtime compatibility smoke tests
         run: java -cp build/runtime-policy BedrockRuntimeCompatibilitySmokeTest
+
+      - name: Run APK split-set validation smoke tests
+        run: java -cp build/runtime-policy ApkSetValidatorSmokeTest
