@@ -12,6 +12,8 @@ The upstream LeviLauncher project and its contributors are credited under the Ap
 - **Prepare native libraries per version.** The runtime extracts and caches the selected build Android native libraries and prepares the game activity before launch.
 - **Keep worlds and packs organized.** The inherited content tools support world and resource-pack management, backups and world inspection.
 - **Use legitimate account and store validation.** The official Google Play Minecraft installation remains a required base game; account and platform checks are not bypassed.
+- **Verify version packages before import.** APK/APKS sets are staged and checked for one base APK, matching Minecraft package/version/signature metadata, safe archive paths and size limits. Existing instance data is not overwritten on name collisions.
+- **Verify Google Play downloads.** Completed split downloads are not marked ready until every APK matches the base build and signer.
 
 ## Current Android runtime requirements
 
@@ -55,11 +57,13 @@ Build locally:
 ./gradlew assembleDebug
 ```
 
-The project also contains unit tests:
+The project also contains unit tests and split-set validation coverage:
 
 ```bash
 ./gradlew :app:testDebugUnitTest
 ```
+
+See [Phase 10 APK import and download integrity](docs/PHASE10_APK_VERSION_PIPELINE.md) for accepted APKS layouts, safety limits and validation details.
 
 Some integrations require local configuration and are not committed to this repository. The Android CI workflow downloads the Discord Social SDK from a configured private release source and may use Firebase / CurseForge credentials supplied through GitHub Actions secrets. Do not commit API keys, signing keys, Firebase service files or private SDK binaries.
 
