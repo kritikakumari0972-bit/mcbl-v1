@@ -1,0 +1,30 @@
+name: Runtime compatibility policy
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  policy-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Compile runtime compatibility policy
+        run: javac -d build/runtime-policy app/src/main/java/org/levimc/launcher/core/minecraft/BedrockRuntimeCompatibility.java scripts/BedrockRuntimeCompatibilitySmokeTest.java
+
+      - name: Run runtime compatibility smoke tests
+        run: java -cp build/runtime-policy BedrockRuntimeCompatibilitySmokeTest
